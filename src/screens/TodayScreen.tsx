@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  ImageBackground,
 } from "react-native";
 import { MoodSlider } from "../components/MoodSlider";
 import { JournalInput } from "../components/JournalInput";
@@ -13,21 +14,61 @@ import { useTheme } from "../hooks/useTheme";
 import { useEntries } from "../hooks/useEntries";
 import { useToast } from "../hooks/useToast";
 
-// Mascot component placeholder - add your Lottie file to assets/radish_idle.json to enable
-const MascotSlot: React.FC = () => {
-  return null; // Renders nothing until Lottie file is added
+// Beautiful date formatting
+const formatTodayDate = (): {
+  dayName: string;
+  date: string;
+  month: string;
+  greeting: string;
+} => {
+  const now = new Date();
+  const dayNames = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+  const monthNames = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+
+  const hour = now.getHours();
+  let greeting = "raddishhh ✨";
+  if (hour >= 12 && hour < 17) greeting = "raddish time 🌱";
+  else if (hour >= 17) greeting = "evening radish 🌙";
+
+  return {
+    dayName: dayNames[now.getDay()],
+    date: now.getDate().toString(),
+    month: monthNames[now.getMonth()],
+    greeting,
+  };
 };
 
-// Get weather-based background color
-const getWeatherBackground = (mood: number, isDark: boolean): string => {
-  const baseColors = {
-    1: isDark ? "#2D3748" : "#E2E8F0", // Storm
-    2: isDark ? "#374151" : "#F1F5F9", // Cloudy
-    3: isDark ? "#1E3A8A" : "#DBEAFE", // Okay
-    4: isDark ? "#92400E" : "#FEF3C7", // Sunny
-    5: isDark ? "#B45309" : "#FDE68A", // Radiant
+// Get mood-based background image
+const getMoodBackgroundImage = (mood: number) => {
+  const images = {
+    1: require("../../assets/1.png"),
+    2: require("../../assets/2.png"),
+    3: require("../../assets/3.png"),
+    4: require("../../assets/4.png"),
+    5: require("../../assets/5.png"),
   };
-  return baseColors[mood as keyof typeof baseColors] || baseColors[3];
+  return images[mood as keyof typeof images] || images[3];
 };
 
 export const TodayScreen: React.FC = () => {
@@ -37,13 +78,11 @@ export const TodayScreen: React.FC = () => {
 
   const [mood, setMood] = useState(3);
   const [text, setText] = useState("");
-  const [enhancedText, setEnhancedText] = useState("");
-  const [isShowingEnhanced, setIsShowingEnhanced] = useState(false);
   const [hasExistingEntry, setHasExistingEntry] = useState(false);
   const [saving, setSaving] = useState(false);
   const [enhancing, setEnhancing] = useState(false);
 
-  const weatherBackground = getWeatherBackground(mood, colorScheme === "dark");
+  const backgroundImage = getMoodBackgroundImage(mood);
 
   useEffect(() => {
     loadTodayEntry();
@@ -55,9 +94,6 @@ export const TodayScreen: React.FC = () => {
       if (todayEntry) {
         setMood(todayEntry.mood);
         setText(todayEntry.text);
-        if (todayEntry.enhancedText) {
-          setEnhancedText(todayEntry.enhancedText);
-        }
         setHasExistingEntry(true);
       }
     } catch (error) {
@@ -123,109 +159,114 @@ export const TodayScreen: React.FC = () => {
 
   const isDisabled = saving || loading || text.trim().length === 0;
 
+  const dateInfo = formatTodayDate();
+
   return (
-    <View style={[styles.container, { backgroundColor: weatherBackground }]}>
-      <ScrollView
-        contentContainerStyle={[styles.content, { padding: spacing.md }]}
-        showsVerticalScrollIndicator={false}
-        accessibilityLabel="Today's journal entry form"
-      >
-        {/* Compact Header */}
-        <View style={[styles.header, { marginBottom: spacing.lg }]}>
-          <Text
-            style={[styles.title, { color: colors.text }, typography.heading]}
-          >
-            Today's Entry
+    <ImageBackground
+      source={backgroundImage}
+      style={styles.container}
+      resizeMode="cover"
+    >
+      <View style={styles.content}>
+        {/* Compact Date Header - Top Fixed */}
+        <View style={styles.compactHeader}>
+          <Text style={[styles.compactGreeting, { color: "#FFFFFF" }]}>
+            {dateInfo.greeting}
           </Text>
+          <View style={styles.compactDateRow}>
+            <Text style={[styles.compactDay, { color: "#FFFFFF" }]}>
+              {dateInfo.dayName}
+            </Text>
+            <Text style={[styles.compactDate, { color: "#FFFFFF" }]}>
+              {dateInfo.date}
+            </Text>
+          </View>
         </View>
 
-        {/* Compact Mood Section */}
-        <View style={[styles.compactMoodSection, { marginBottom: spacing.lg }]}>
-          <MoodSlider value={mood} onValueChange={setMood} />
-        </View>
-
-        {/* Journal Input with AI Enhancement */}
-        <View
-          style={[
-            styles.journalSection,
-            {
-              backgroundColor: colors.surface + "E6",
-              borderRadius: 16,
-              padding: spacing.md,
-              marginBottom: spacing.lg,
-            },
-          ]}
+        {/* Main Content Area - Scrollable */}
+        <ScrollView
+          style={styles.scrollContent}
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
         >
-          <JournalInput
-            value={text}
-            onChangeText={setText}
-            placeholder="What's on your mind today?"
-          />
+          {/* Mood Slider - Compact & Visible */}
+          <View style={styles.compactMoodSection}>
+            <MoodSlider value={mood} onValueChange={setMood} />
+          </View>
 
-          {/* AI Enhancement Button */}
-          {text.trim().length > 10 && (
-            <TouchableOpacity
-              style={[
-                styles.enhanceButton,
-                {
-                  backgroundColor: colors.primary + "20",
-                  borderColor: colors.primary,
-                },
-              ]}
-              onPress={enhanceText}
-              disabled={enhancing}
-            >
-              {enhancing ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text
-                  style={[styles.enhanceButtonText, { color: colors.primary }]}
+          {/* Journal Input - Optimized Size */}
+          <View style={styles.compactJournalSection}>
+            <JournalInput
+              value={text}
+              onChangeText={setText}
+              placeholder="What's on your mind today?"
+            />
+
+            {/* AI Enhancement & Save in Row */}
+            <View style={styles.actionRow}>
+              {/* Clear Button */}
+              {text.trim().length > 0 && (
+                <TouchableOpacity
+                  style={styles.clearButton}
+                  onPress={() => setText("")}
                 >
-                  ✨ Enhance with AI
-                </Text>
+                  <Text style={styles.clearButtonText}>🗑️</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
-          )}
-        </View>
 
-        {/* Action Buttons */}
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={[
-              styles.saveButton,
-              {
-                backgroundColor: isDisabled ? colors.border : colors.primary,
-              },
-            ]}
-            onPress={handleSave}
-            disabled={isDisabled}
-            accessibilityLabel={
-              hasExistingEntry ? "Update today's entry" : "Save today's entry"
-            }
-          >
-            {saving ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={[styles.saveButtonText, typography.subheading]}>
-                {hasExistingEntry ? "Update Entry" : "Save Entry"}
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
+              {/* AI Enhancement Button */}
+              {text.trim().length > 10 && (
+                <TouchableOpacity
+                  style={styles.compactEnhanceButton}
+                  onPress={enhanceText}
+                  disabled={enhancing}
+                >
+                  {enhancing ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.compactButtonText,
+                        { color: colors.primary },
+                      ]}
+                    >
+                      ✨ AI
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
 
-        {hasExistingEntry && (
-          <Text
-            style={[
-              styles.updateNote,
-              { color: colors.textSecondary },
-              typography.caption,
-            ]}
-          >
-            You can update your entry multiple times throughout the day.
-          </Text>
-        )}
-      </ScrollView>
-    </View>
+              {/* Save Button */}
+              <TouchableOpacity
+                style={[
+                  styles.compactSaveButton,
+                  {
+                    backgroundColor: isDisabled
+                      ? colors.border
+                      : colors.primary,
+                  },
+                ]}
+                onPress={handleSave}
+                disabled={isDisabled}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.compactSaveText}>
+                    {hasExistingEntry ? "Update" : "Save"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+
+        {/* Mascot Space - Bottom Fixed */}
+        <View style={styles.mascotArea}>
+          {/* Future mascot will go here */}
+        </View>
+      </View>
+    </ImageBackground>
   );
 };
 
@@ -234,57 +275,140 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flexGrow: 1,
-    minHeight: "100%",
+    flex: 1,
   },
-  header: {
+
+  // Compact Header - Fixed at top
+  compactHeader: {
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    paddingTop: 50, // Safe area
+    paddingBottom: 12,
+    paddingHorizontal: 20,
     alignItems: "center",
   },
-  title: {
+  compactGreeting: {
+    fontSize: 15,
+    fontWeight: "600",
+    opacity: 0.95,
+    marginBottom: 6,
+    letterSpacing: 0.5,
+  },
+  compactDateRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 10,
+    backgroundColor: "rgba(139, 69, 19, 0.3)", // Earthy brown
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(160, 82, 45, 0.4)", // Saddle brown
+  },
+  compactDay: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#F5E6D3", // Warm cream
+    textShadowColor: "rgba(0, 0, 0, 0.3)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  compactDate: {
+    fontSize: 22,
     fontWeight: "bold",
-    textAlign: "center",
+    color: "#FFE4B5", // Moccasin
+    textShadowColor: "rgba(0, 0, 0, 0.4)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
+
+  // Scrollable content area
+  scrollContent: {
+    flex: 1,
+  },
+  scrollContainer: {
+    padding: 16,
+    paddingBottom: 20,
+  },
+
+  // Compact Mood Section
   compactMoodSection: {
-    width: "100%",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-  },
-  journalSection: {
-    width: "100%",
-  },
-  enhanceButton: {
-    marginTop: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: "center",
-    alignSelf: "flex-end",
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  enhanceButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  buttonContainer: {
-    width: "100%",
-  },
-  saveButton: {
+
+  // Compact Journal Section
+  compactJournalSection: {
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
     borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+
+  // Action Row (Clear, AI + Save buttons)
+  actionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 12,
+    gap: 8,
+  },
+  clearButton: {
+    backgroundColor: "rgba(255, 99, 71, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 99, 71, 0.3)",
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  clearButtonText: {
+    fontSize: 14,
+  },
+  compactEnhanceButton: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "rgba(0, 122, 255, 0.3)",
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  compactButtonText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  compactSaveButton: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 44,
+    minHeight: 36,
   },
-  saveButtonText: {
+  compactSaveText: {
     color: "#FFFFFF",
+    fontSize: 14,
     fontWeight: "600",
   },
-  updateNote: {
-    textAlign: "center",
-    fontStyle: "italic",
-    marginTop: 8,
+
+  // Mascot Area - Fixed at bottom
+  mascotArea: {
+    height: 180,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

@@ -22,6 +22,10 @@ interface MagicalCalendarProps {
   onDatePress: (entry: Entry) => void;
   selectedMonth?: Date;
   onMonthChange?: (month: Date) => void;
+  viewMode?: "monthly" | "weekly";
+  weekStartsOnSunday?: boolean;
+  selectedDate?: Date;
+  onDateSelect?: (date: Date) => void;
 }
 
 const { width } = Dimensions.get("window");
@@ -32,9 +36,14 @@ export const MagicalCalendar: React.FC<MagicalCalendarProps> = ({
   onDatePress,
   selectedMonth = new Date(),
   onMonthChange,
+  viewMode = "monthly",
+  weekStartsOnSunday = true,
+  selectedDate,
+  onDateSelect,
 }) => {
   const { colors } = useTheme();
   const [currentMonth, setCurrentMonth] = useState(selectedMonth);
+  const [currentWeek, setCurrentWeek] = useState(new Date());
   const [glowAnimation] = useState(new Animated.Value(0));
 
   // Create a map of entries by date for quick lookup
@@ -66,28 +75,56 @@ export const MagicalCalendar: React.FC<MagicalCalendarProps> = ({
     return () => pulse.stop();
   }, []);
 
-  const getDaysInMonth = useCallback((date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
+  const getDaysInMonth = useCallback(
+    (date: Date) => {
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const daysInMonth = lastDay.getDate();
+      const startingDayOfWeek = weekStartsOnSunday
+        ? firstDay.getDay()
+        : (firstDay.getDay() + 6) % 7;
 
-    const days: (Date | null)[] = [];
+      const days: (Date | null)[] = [];
 
-    // Add empty cells for days before the first day of the month
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(null);
-    }
+      // Add empty cells for days before the first day of the month
+      for (let i = 0; i < startingDayOfWeek; i++) {
+        days.push(null);
+      }
 
-    // Add all days of the month
-    for (let day = 1; day <= daysInMonth; day++) {
-      days.push(new Date(year, month, day));
-    }
+      // Add all days of the month
+      for (let day = 1; day <= daysInMonth; day++) {
+        days.push(new Date(year, month, day));
+      }
 
-    return days;
-  }, []);
+      return days;
+    },
+    [weekStartsOnSunday]
+  );
+
+  const getWeekDays = useCallback(
+    (date: Date) => {
+      const days: Date[] = [];
+      const startOfWeek = new Date(date);
+
+      // Find Sunday (start of week)
+      const dayOfWeek = weekStartsOnSunday
+        ? date.getDay()
+        : (date.getDay() + 6) % 7;
+      startOfWeek.setDate(date.getDate() - dayOfWeek);
+
+      // Add 7 days starting from Sunday
+      for (let i = 0; i < 7; i++) {
+        const day = new Date(startOfWeek);
+        day.setDate(startOfWeek.getDate() + i);
+        days.push(day);
+      }
+
+      return days;
+    },
+    [weekStartsOnSunday]
+  );
 
   const formatDateISO = (date: Date): string => {
     return date.toISOString().split("T")[0];
@@ -107,7 +144,17 @@ export const MagicalCalendar: React.FC<MagicalCalendarProps> = ({
     onMonthChange?.(newMonth);
   };
 
-  const renderDayCell = (date: Date | null, index: number) => {
+  const navigateWeek = (direction: "prev" | "next") => {
+    const newWeek = new Date(currentWeek);
+    newWeek.setDate(currentWeek.getDate() + (direction === "next" ? 7 : -7));
+    setCurrentWeek(newWeek);
+  };
+
+  const renderDayCell = (
+    date: Date | null,
+    index: number,
+    isWeekView = false
+  ) => {
     if (!date) {
       return <View key={`empty-${index}`} style={styles.emptyCell} />;
     }
@@ -117,20 +164,32 @@ export const MagicalCalendar: React.FC<MagicalCalendarProps> = ({
     const moodTheme = entry ? getMoodTheme(entry.mood) : null;
     const emoji = entry ? getMoodEmoji(entry.mood) : null;
     const today = isToday(date);
+    const isSelected = selectedDate && formatDateISO(selectedDate) === dateISO;
+
+    const cellStyle = isWeekView ? styles.weekDayCell : styles.dayCell;
 
     return (
       <TouchableOpacity
         key={dateISO}
         style={[
-          styles.dayCell,
+          cellStyle,
           {
             backgroundColor: entry ? moodTheme?.light : colors.surface,
-            borderColor: today ? ghibliColors.castle.magicGreen : colors.border,
-            borderWidth: today ? 2 : 1,
+            borderColor: today
+              ? ghibliColors.castle.magicGreen
+              : isSelected
+              ? ghibliColors.castle.steamBlue
+              : colors.border,
+            borderWidth: today || isSelected ? 2 : 1,
           },
         ]}
-        onPress={() => entry && onDatePress(entry)}
-        disabled={!entry}
+        onPress={() => {
+          if (entry) {
+            onDatePress(entry);
+          } else {
+            onDateSelect?.(date);
+          }
+        }}
         accessibilityLabel={`${date.getDate()} ${
           entry ? `with ${getMoodEmoji(entry.mood)} mood` : "no entry"
         }`}
@@ -152,7 +211,7 @@ export const MagicalCalendar: React.FC<MagicalCalendarProps> = ({
 
         <Text
           style={[
-            styles.dayNumber,
+            isWeekView ? styles.weekDayNumber : styles.dayNumber,
             {
               color: entry ? moodTheme?.text : colors.textSecondary,
               fontWeight: today ? "bold" : "normal",
@@ -162,7 +221,11 @@ export const MagicalCalendar: React.FC<MagicalCalendarProps> = ({
           {date.getDate()}
         </Text>
 
-        {emoji && <Text style={styles.dayEmoji}>{emoji}</Text>}
+        {emoji && (
+          <Text style={isWeekView ? styles.weekDayEmoji : styles.dayEmoji}>
+            {emoji}
+          </Text>
+        )}
 
         {entry && (
           <View
@@ -191,31 +254,57 @@ export const MagicalCalendar: React.FC<MagicalCalendarProps> = ({
     "December",
   ];
 
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayNames = weekStartsOnSunday
+    ? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-  const days = getDaysInMonth(currentMonth);
+  const days =
+    viewMode === "weekly"
+      ? getWeekDays(currentWeek)
+      : getDaysInMonth(currentMonth);
+  const currentDate = viewMode === "weekly" ? currentWeek : currentMonth;
+  const navigate = viewMode === "weekly" ? navigateWeek : navigateMonth;
+
+  const getHeaderTitle = () => {
+    if (viewMode === "weekly") {
+      const startOfWeek = getWeekDays(currentWeek)[0];
+      const endOfWeek = getWeekDays(currentWeek)[6];
+      const startMonth = monthNames[startOfWeek.getMonth()].slice(0, 3);
+      const endMonth = monthNames[endOfWeek.getMonth()].slice(0, 3);
+
+      if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
+        return `${startMonth} ${startOfWeek.getDate()}-${endOfWeek.getDate()}`;
+      } else {
+        return `${startMonth} ${startOfWeek.getDate()} - ${endMonth} ${endOfWeek.getDate()}`;
+      }
+    } else {
+      return monthNames[currentMonth.getMonth()];
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header with month navigation */}
+      {/* Header with navigation */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
           style={[
             styles.navButton,
             { backgroundColor: ghibliColors.castle.steamBlue },
           ]}
-          onPress={() => navigateMonth("prev")}
-          accessibilityLabel="Previous month"
+          onPress={() => navigate("prev")}
+          accessibilityLabel={`Previous ${
+            viewMode === "weekly" ? "week" : "month"
+          }`}
         >
           <Text style={styles.navButtonText}>‹</Text>
         </TouchableOpacity>
 
         <View style={styles.monthTitle}>
           <Text style={[styles.monthText, { color: colors.text }]}>
-            {monthNames[currentMonth.getMonth()]}
+            {getHeaderTitle()}
           </Text>
           <Text style={[styles.yearText, { color: colors.textSecondary }]}>
-            {currentMonth.getFullYear()}
+            {currentDate.getFullYear()}
           </Text>
         </View>
 
@@ -224,8 +313,10 @@ export const MagicalCalendar: React.FC<MagicalCalendarProps> = ({
             styles.navButton,
             { backgroundColor: ghibliColors.castle.steamBlue },
           ]}
-          onPress={() => navigateMonth("next")}
-          accessibilityLabel="Next month"
+          onPress={() => navigate("next")}
+          accessibilityLabel={`Next ${
+            viewMode === "weekly" ? "week" : "month"
+          }`}
         >
           <Text style={styles.navButtonText}>›</Text>
         </TouchableOpacity>
@@ -234,7 +325,14 @@ export const MagicalCalendar: React.FC<MagicalCalendarProps> = ({
       {/* Day names header */}
       <View style={styles.dayNamesRow}>
         {dayNames.map((dayName) => (
-          <View key={dayName} style={styles.dayNameCell}>
+          <View
+            key={dayName}
+            style={
+              viewMode === "weekly"
+                ? styles.weekDayNameCell
+                : styles.dayNameCell
+            }
+          >
             <Text style={[styles.dayNameText, { color: colors.textSecondary }]}>
               {dayName}
             </Text>
@@ -247,33 +345,41 @@ export const MagicalCalendar: React.FC<MagicalCalendarProps> = ({
         style={styles.calendarScroll}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.calendarGrid}>
-          {days.map((date, index) => renderDayCell(date, index))}
+        <View
+          style={viewMode === "weekly" ? styles.weekGrid : styles.calendarGrid}
+        >
+          {viewMode === "weekly"
+            ? days.map((date, index) => renderDayCell(date, index, true))
+            : days.map((date, index) => renderDayCell(date, index, false))}
         </View>
 
-        {/* Legend */}
-        <View style={[styles.legend, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.legendTitle, { color: colors.text }]}>
-            Mood Legend ✨
-          </Text>
-          <View style={styles.legendRow}>
-            {[1, 2, 3, 4, 5].map((mood) => {
-              const theme = getMoodTheme(mood);
-              return (
-                <View key={mood} style={styles.legendItem}>
-                  <View
-                    style={[
-                      styles.legendColor,
-                      { backgroundColor: theme.light },
-                    ]}
-                  >
-                    <Text style={styles.legendEmoji}>{getMoodEmoji(mood)}</Text>
+        {/* Legend - only show in monthly view */}
+        {viewMode === "monthly" && (
+          <View style={[styles.legend, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.legendTitle, { color: colors.text }]}>
+              Mood Legend ✨
+            </Text>
+            <View style={styles.legendRow}>
+              {[1, 2, 3, 4, 5].map((mood) => {
+                const theme = getMoodTheme(mood);
+                return (
+                  <View key={mood} style={styles.legendItem}>
+                    <View
+                      style={[
+                        styles.legendColor,
+                        { backgroundColor: theme.light },
+                      ]}
+                    >
+                      <Text style={styles.legendEmoji}>
+                        {getMoodEmoji(mood)}
+                      </Text>
+                    </View>
                   </View>
-                </View>
-              );
-            })}
+                );
+              })}
+            </View>
           </View>
-        </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -288,51 +394,57 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingBottom: ghibliSpacing.md,
-    marginBottom: ghibliSpacing.md,
+    paddingBottom: ghibliSpacing.sm,
+    marginBottom: ghibliSpacing.sm,
     borderBottomWidth: 1,
   },
   navButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 2,
+    elevation: 2,
   },
   navButtonText: {
     color: "#FFFFFF",
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "bold",
   },
   monthTitle: {
     alignItems: "center",
   },
   monthText: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "bold",
     letterSpacing: 0.5,
   },
   yearText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "500",
   },
   dayNamesRow: {
     flexDirection: "row",
-    marginBottom: ghibliSpacing.sm,
+    marginBottom: ghibliSpacing.xs,
   },
   dayNameCell: {
     width: CELL_SIZE,
-    height: 30,
+    height: 24,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  weekDayNameCell: {
+    flex: 1,
+    height: 24,
     justifyContent: "center",
     alignItems: "center",
   },
   dayNameText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -344,6 +456,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
   },
+  weekGrid: {
+    flexDirection: "row",
+    height: 80,
+    marginBottom: ghibliSpacing.md,
+  },
   emptyCell: {
     width: CELL_SIZE,
     height: CELL_SIZE,
@@ -353,8 +470,22 @@ const styles = StyleSheet.create({
     height: CELL_SIZE,
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: 6,
     margin: 1,
+    position: "relative",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  weekDayCell: {
+    flex: 1,
+    height: 80,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 8,
+    margin: 2,
     position: "relative",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -368,37 +499,48 @@ const styles = StyleSheet.create({
     left: -2,
     right: -2,
     bottom: -2,
-    borderRadius: 10,
+    borderRadius: 8,
   },
   dayNumber: {
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 1,
+  },
+  weekDayNumber: {
+    fontSize: 18,
     fontWeight: "600",
     marginBottom: 2,
   },
   dayEmoji: {
-    fontSize: 12,
+    fontSize: 10,
+    position: "absolute",
+    top: 2,
+    right: 2,
+  },
+  weekDayEmoji: {
+    fontSize: 14,
     position: "absolute",
     top: 4,
     right: 4,
   },
   moodIndicator: {
     position: "absolute",
-    bottom: 4,
-    left: 4,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    bottom: 2,
+    left: 2,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
   },
   legend: {
-    marginTop: ghibliSpacing.lg,
-    padding: ghibliSpacing.md,
-    borderRadius: 12,
+    marginTop: ghibliSpacing.sm,
+    padding: ghibliSpacing.sm,
+    borderRadius: 8,
     alignItems: "center",
   },
   legendTitle: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: "600",
-    marginBottom: ghibliSpacing.sm,
+    marginBottom: ghibliSpacing.xs,
   },
   legendRow: {
     flexDirection: "row",
@@ -409,13 +551,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   legendColor: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
   },
   legendEmoji: {
-    fontSize: 16,
+    fontSize: 10,
   },
 });

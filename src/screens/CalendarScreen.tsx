@@ -1,18 +1,25 @@
 import React, { useCallback, useState } from "react";
-import { View, Text, StyleSheet, ActivityIndicator, Modal } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  Modal,
+  TouchableOpacity,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "@react-navigation/native";
 import { MagicalCalendar } from "../components/MagicalCalendar";
 import { EntryDetailScreen } from "./EntryDetailScreen";
-import { useTheme } from "../hooks/useTheme";
 import { useEntries } from "../hooks/useEntries";
 import { Entry } from "../data/types";
-import { ghibliColors, ghibliSpacing } from "../theme/ghibliTheme";
 
 export const CalendarScreen: React.FC = () => {
-  const { colors, typography } = useTheme();
   const { entries, loading, loadEntries } = useEntries();
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [viewMode, setViewMode] = useState<"monthly" | "weekly">("monthly");
 
   // Refresh entries when screen comes into focus
   useFocusEffect(
@@ -29,75 +36,114 @@ export const CalendarScreen: React.FC = () => {
     setSelectedEntry(null);
   };
 
-  const handleEditEntry = (entry: Entry) => {
+  const handleEditEntry = () => {
     // Navigate to edit mode - for now just close
     setSelectedEntry(null);
   };
 
+  const renderViewToggle = () => (
+    <View style={styles.viewToggle}>
+      <TouchableOpacity
+        style={[
+          styles.toggleButton,
+          viewMode === "monthly" && styles.activeToggle,
+        ]}
+        onPress={() => setViewMode("monthly")}
+      >
+        <Text
+          style={[
+            styles.toggleText,
+            viewMode === "monthly" && styles.activeToggleText,
+          ]}
+        >
+          🗓️ Month
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.toggleButton,
+          viewMode === "weekly" && styles.activeToggle,
+        ]}
+        onPress={() => setViewMode("weekly")}
+      >
+        <Text
+          style={[
+            styles.toggleText,
+            viewMode === "weekly" && styles.activeToggleText,
+          ]}
+        >
+          📅 Week
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={[styles.emptyTitle, { color: colors.text }]}>
-        ✨ Your Magical Journal ✨
+    <View style={styles.emptyGarden}>
+      <Text style={styles.emptyGardenTitle}>🌱 Garden Awaits 🌱</Text>
+      <Text style={styles.emptyGardenText}>
+        Plant your first story to bloom
       </Text>
-      <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-        Start writing to see your moods bloom across the calendar like flowers
-        in Howl's garden
-      </Text>
+      <View style={styles.emptyGardenDecor}>
+        <Text style={styles.gardenEmoji}>🌿🌸🌿</Text>
+      </View>
     </View>
   );
 
   if (loading) {
     return (
-      <View
-        style={[
-          styles.container,
-          styles.centered,
-          { backgroundColor: colors.background },
-        ]}
+      <LinearGradient
+        colors={["#E8F5E8", "#F1F8E9", "#E8F5E8"]}
+        style={[styles.container, styles.centered]}
       >
+        <Text style={styles.loadingText}>
+          🌱 Growing your garden stories... 🌱
+        </Text>
         <ActivityIndicator
           size="large"
-          color={ghibliColors.castle.magicGreen}
+          color="#2E7D32"
+          style={{ marginTop: 16 }}
         />
-        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-          Gathering your magical memories...
-        </Text>
-      </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.title, { color: colors.text }]}>
-          ✨ Magical Calendar ✨
-        </Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          {entries.length > 0
-            ? `${entries.length} magical ${
-                entries.length === 1 ? "memory" : "memories"
-              } captured`
-            : "Your journey awaits..."}
-        </Text>
+    <LinearGradient
+      colors={["#E8F5E8", "#F1F8E9", "#E8F5E8"]}
+      style={styles.container}
+    >
+      {/* Compact Garden Header */}
+      <View style={styles.compactHeader}>
+        <View style={styles.headerRow}>
+          <Text style={styles.compactTitle}>🌻 Garden Stories</Text>
+          <Text style={styles.compactStats}>{entries.length} 🌱</Text>
+        </View>
+        {renderViewToggle()}
       </View>
 
-      {/* Calendar */}
-      {entries.length > 0 ? (
-        <MagicalCalendar
-          entries={entries}
-          onDatePress={handleDatePress}
-          selectedMonth={currentMonth}
-          onMonthChange={setCurrentMonth}
-        />
-      ) : (
-        renderEmptyState()
-      )}
+      {/* Garden Bed - Full Screen Calendar */}
+      <View style={styles.fullScreenGarden}>
+        {entries.length > 0 ? (
+          <MagicalCalendar
+            entries={entries}
+            onDatePress={handleDatePress}
+            selectedMonth={currentMonth}
+            onMonthChange={setCurrentMonth}
+            selectedDate={selectedDate}
+            onDateSelect={setSelectedDate}
+            viewMode={viewMode}
+            weekStartsOnSunday={true}
+          />
+        ) : (
+          renderEmptyState()
+        )}
+      </View>
 
       {/* Entry Detail Modal */}
       <Modal
         visible={selectedEntry !== null}
-        animationType="none"
+        animationType="slide"
         transparent={true}
         onRequestClose={handleCloseDetail}
       >
@@ -109,7 +155,7 @@ export const CalendarScreen: React.FC = () => {
           />
         )}
       </Modal>
-    </View>
+    </LinearGradient>
   );
 };
 
@@ -121,46 +167,102 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  header: {
-    alignItems: "center",
-    padding: ghibliSpacing.lg,
+
+  // Compact Header
+  compactHeader: {
+    paddingTop: 50,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.1)",
+    borderBottomColor: "#C8E6C9",
   },
-  title: {
-    fontSize: 24,
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  compactTitle: {
+    fontSize: 18,
     fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 4,
-    letterSpacing: 0.5,
+    color: "#2E7D32",
   },
-  subtitle: {
+  compactStats: {
     fontSize: 14,
-    textAlign: "center",
-    fontStyle: "italic",
+    color: "#4CAF50",
+    fontWeight: "600",
   },
-  loadingText: {
-    textAlign: "center",
-    marginTop: ghibliSpacing.md,
-    fontSize: 16,
-    fontStyle: "italic",
+
+  // View Toggle
+  viewToggle: {
+    flexDirection: "row",
+    backgroundColor: "rgba(255, 255, 255, 0.6)",
+    borderRadius: 20,
+    padding: 2,
+    alignSelf: "center",
   },
-  emptyContainer: {
+  toggleButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 18,
+  },
+  activeToggle: {
+    backgroundColor: "#2E7D32",
+  },
+  toggleText: {
+    fontSize: 12,
+    color: "#4CAF50",
+    fontWeight: "600",
+  },
+  activeToggleText: {
+    color: "#FFFFFF",
+  },
+
+  // Full Screen Garden (Calendar)
+  fullScreenGarden: {
+    flex: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
+    marginHorizontal: 8,
+    marginVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#C8E6C9",
+  },
+
+  // Empty Garden State
+  emptyGarden: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: ghibliSpacing["2xl"],
+    paddingHorizontal: 20,
   },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: ghibliSpacing.md,
-  },
-  emptySubtitle: {
+  emptyGardenTitle: {
     fontSize: 16,
+    fontWeight: "600",
+    color: "#2E7D32",
     textAlign: "center",
-    lineHeight: 24,
+    marginBottom: 8,
+  },
+  emptyGardenText: {
+    fontSize: 12,
+    color: "#4CAF50",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  emptyGardenDecor: {
+    alignItems: "center",
+  },
+  gardenEmoji: {
+    fontSize: 20,
+  },
+
+  // Loading
+  loadingText: {
+    textAlign: "center",
+    fontSize: 16,
     fontStyle: "italic",
+    color: "#2E7D32",
+    marginBottom: 8,
   },
 });

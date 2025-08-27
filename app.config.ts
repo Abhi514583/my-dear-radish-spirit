@@ -13,6 +13,10 @@ export default {
     assetBundlePatterns: ["**/*"],
     ios: {
       supportsTablet: true,
+      bundleIdentifier: "com.abhi514.mydearradishspirit",
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+      },
     },
     android: {
       adaptiveIcon: {
@@ -21,14 +25,10 @@ export default {
     },
     extra: {
       GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+      eas: {
+        projectId: "8a1939a0-7fc9-40bb-8478-485713468311",
+      },
     },
-    plugins: [
-      [
-        "expo-notifications",
-        {
-          color: "#ffffff",
-        },
-      ],
-    ],
+    plugins: [],
   },
 };
