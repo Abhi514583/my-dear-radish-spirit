@@ -6,16 +6,25 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
+  Dimensions,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "@react-navigation/native";
 import { MetricCard } from "../components/MetricCard";
 import { useTheme } from "../hooks/useTheme";
 import { useEntries } from "../hooks/useEntries";
 import { useStreak } from "../hooks/useStreak";
 import { AIService } from "../services/AIService";
+import {
+  getMoodGradient,
+  getMoodTheme,
+  getMoodEmoji,
+} from "../theme/ghibliTheme";
+
+const { width } = Dimensions.get("window");
 
 export const InsightsScreen: React.FC = () => {
-  const { colors, typography, spacing } = useTheme();
+  const { colors } = useTheme();
   const {
     entries,
     getEntryCount,
@@ -25,8 +34,9 @@ export const InsightsScreen: React.FC = () => {
   const { streak, loading: streakLoading } = useStreak();
 
   const [entryCount, setEntryCount] = useState(0);
-  const [averageMood, setAverageMood] = useState(0);
+  const [averageMood, setAverageMood] = useState(3);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<"weekly" | "monthly">("weekly");
   const [aiSummary, setAiSummary] = useState<{
     summary: string;
     focus: string;
@@ -34,11 +44,15 @@ export const InsightsScreen: React.FC = () => {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // Get dynamic theme based on average mood
+  const moodGradient = getMoodGradient(Math.round(averageMood));
+  const moodTheme = getMoodTheme(Math.round(averageMood));
+  const moodEmoji = getMoodEmoji(Math.round(averageMood));
+
   useEffect(() => {
     loadInsights();
   }, [loadInsights]);
 
-  // Refresh insights when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       loadInsights();
@@ -54,7 +68,7 @@ export const InsightsScreen: React.FC = () => {
       ]);
 
       setEntryCount(count);
-      setAverageMood(avgMood);
+      setAverageMood(avgMood || 3);
     } catch (error) {
       console.error("Failed to load insights:", error);
     } finally {
@@ -62,14 +76,17 @@ export const InsightsScreen: React.FC = () => {
     }
   }, [getEntryCount, getAverageMood]);
 
-  const generateWeeklySummary = useCallback(async () => {
-    if (entries.length < 7) return;
+  const generateSummary = useCallback(async () => {
+    if (entries.length < (viewMode === "weekly" ? 7 : 30)) return;
 
     try {
       setAiLoading(true);
       setAiError(null);
 
-      const result = await AIService.aiWeeklySummary(entries);
+      const result =
+        viewMode === "weekly"
+          ? await AIService.aiWeeklySummary(entries)
+          : await AIService.aiMonthlySummary(entries);
 
       if (result.ok && result.summary && result.focus) {
         setAiSummary({
@@ -85,232 +102,292 @@ export const InsightsScreen: React.FC = () => {
     } finally {
       setAiLoading(false);
     }
-  }, [entries]);
+  }, [entries, viewMode]);
 
-  const formattedAverageMood = useMemo(() => {
-    if (averageMood === 0) return "0";
-    return averageMood.toFixed(1);
-  }, [averageMood]);
+  const getRecentMoodTrend = () => {
+    if (entries.length < 3) return "neutral";
+    const recent = entries.slice(-7).map((e) => e.mood);
+    const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
+    const prevAvg =
+      entries
+        .slice(-14, -7)
+        .map((e) => e.mood)
+        .reduce((a, b) => a + b, 0) /
+      Math.max(entries.slice(-14, -7).length, 1);
 
-  const isLoading = loading || entriesLoading || streakLoading;
+    if (avg > prevAvg + 0.5) return "improving";
+    if (avg < prevAvg - 0.5) return "declining";
+    return "stable";
+  };
 
-  if (isLoading) {
+  const moodTrend = getRecentMoodTrend();
+
+  if (loading || entriesLoading || streakLoading) {
     return (
-      <View
-        style={[
-          styles.container,
-          styles.centered,
-          { backgroundColor: colors.background },
-        ]}
+      <LinearGradient
+        colors={moodGradient}
+        style={[styles.container, styles.centered]}
       >
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text
-          style={[
-            styles.loadingText,
-            { color: colors.textSecondary, marginTop: spacing.md },
-            typography.body,
-          ]}
-        >
-          Loading your insights...
-        </Text>
-      </View>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingEmoji}>🔮</Text>
+          <ActivityIndicator size="large" color="#FFFFFF" />
+          <Text style={styles.loadingText}>
+            Conjuring your magical insights...
+          </Text>
+        </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={[styles.content, { padding: spacing.lg }]}
-      accessibilityLabel="Journal insights and statistics"
+    <LinearGradient
+      colors={moodGradient}
+      style={styles.container}
+      locations={[0, 0.6, 1]}
     >
-      <View style={[styles.header, { marginBottom: spacing.xl }]}>
-        <Text
-          style={[styles.title, { color: colors.text }, typography.heading]}
-        >
-          Your Insights
-        </Text>
-        <Text
-          style={[
-            styles.subtitle,
-            { color: colors.textSecondary },
-            typography.body,
-          ]}
-        >
-          Track your journaling progress and emotional patterns
-        </Text>
-      </View>
-
-      <View style={[styles.metricsGrid, { gap: spacing.md }]}>
-        <View style={[styles.row, { gap: spacing.md }]}>
-          <MetricCard
-            title="Total Entries"
-            value={entryCount}
-            subtitle={entryCount === 1 ? "entry" : "entries"}
-          />
-          <MetricCard
-            title="Current Streak"
-            value={streak.current}
-            subtitle={streak.current === 1 ? "day" : "days"}
-          />
-        </View>
-
-        <View style={[styles.row, { gap: spacing.md }]}>
-          <MetricCard
-            title="Longest Streak"
-            value={streak.longest}
-            subtitle={streak.longest === 1 ? "day" : "days"}
-          />
-          <MetricCard
-            title="Average Mood"
-            value={formattedAverageMood}
-            subtitle="out of 5"
-          />
-        </View>
-      </View>
-
-      {/* AI Weekly Summary Card */}
-      <View
-        style={[
-          styles.aiCard,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            marginTop: spacing.lg,
-          },
+      {/* Magical Header */}
+      <LinearGradient
+        colors={[
+          `${moodTheme.primary}CC`,
+          `${moodTheme.primary}99`,
+          `${moodTheme.primary}66`,
         ]}
+        style={styles.magicalHeader}
       >
-        <Text
-          style={[
-            styles.aiCardTitle,
-            { color: colors.text },
-            typography.subheading,
-          ]}
-        >
-          Wisdom of the Week 🌱
+        <Text style={styles.magicalTitle}>✨ Magical Insights ✨</Text>
+        <Text style={[styles.moodIndicator, { color: moodTheme.text }]}>
+          Your spirit feels {moodEmoji} {getMoodLabel(Math.round(averageMood))}
         </Text>
+      </LinearGradient>
 
-        {entryCount < 7 ? (
-          <Text
+      <ScrollView
+        style={styles.scrollContent}
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Time Period Toggle */}
+        <View style={styles.periodToggle}>
+          <TouchableOpacity
             style={[
-              styles.aiCardSubtitle,
-              { color: colors.textSecondary },
-              typography.body,
+              styles.toggleButton,
+              viewMode === "weekly" && styles.activeToggle,
             ]}
+            onPress={() => setViewMode("weekly")}
           >
-            Add 7 daily entries to unlock your weekly wisdom 🌱
-          </Text>
-        ) : aiSummary ? (
-          <View>
             <Text
               style={[
-                styles.aiSummary,
-                { color: colors.text },
-                typography.body,
+                styles.toggleText,
+                viewMode === "weekly" && styles.activeToggleText,
               ]}
             >
-              {aiSummary.summary}
+              📅 Weekly
             </Text>
-            <View
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              viewMode === "monthly" && styles.activeToggle,
+            ]}
+            onPress={() => setViewMode("monthly")}
+          >
+            <Text
               style={[
-                styles.aiFocus,
-                {
-                  backgroundColor: colors.primary + "20",
-                  marginTop: spacing.md,
-                },
+                styles.toggleText,
+                viewMode === "monthly" && styles.activeToggleText,
               ]}
             >
+              🗓️ Monthly
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Magic Stats Cards */}
+        <View style={styles.statsContainer}>
+          <LinearGradient
+            colors={[`${moodTheme.light}40`, `${moodTheme.light}20`]}
+            style={styles.statCard}
+          >
+            <Text style={styles.statEmoji}>📖</Text>
+            <Text style={[styles.statValue, { color: moodTheme.text }]}>
+              {entryCount}
+            </Text>
+            <Text style={[styles.statLabel, { color: moodTheme.text }]}>
+              Stories Written
+            </Text>
+          </LinearGradient>
+
+          <LinearGradient
+            colors={[`${moodTheme.light}40`, `${moodTheme.light}20`]}
+            style={styles.statCard}
+          >
+            <Text style={styles.statEmoji}>🔥</Text>
+            <Text style={[styles.statValue, { color: moodTheme.text }]}>
+              {streak.current}
+            </Text>
+            <Text style={[styles.statLabel, { color: moodTheme.text }]}>
+              Day Streak
+            </Text>
+          </LinearGradient>
+
+          <LinearGradient
+            colors={[`${moodTheme.light}40`, `${moodTheme.light}20`]}
+            style={styles.statCard}
+          >
+            <Text style={styles.statEmoji}>
+              {moodTrend === "improving"
+                ? "📈"
+                : moodTrend === "declining"
+                ? "📉"
+                : "📊"}
+            </Text>
+            <Text style={[styles.statValue, { color: moodTheme.text }]}>
+              {averageMood.toFixed(1)}
+            </Text>
+            <Text style={[styles.statLabel, { color: moodTheme.text }]}>
+              Mood Average
+            </Text>
+          </LinearGradient>
+        </View>
+
+        {/* AI Summary Crystal Ball */}
+        <LinearGradient
+          colors={[
+            `${moodTheme.primary}30`,
+            `${moodTheme.primary}20`,
+            `${moodTheme.primary}10`,
+          ]}
+          style={styles.crystalBall}
+        >
+          <Text style={styles.crystalTitle}>
+            🔮 {viewMode === "weekly" ? "Weekly" : "Monthly"} Wisdom
+          </Text>
+
+          {entryCount < (viewMode === "weekly" ? 7 : 30) ? (
+            <View style={styles.crystalEmpty}>
               <Text
-                style={[
-                  styles.aiFocusLabel,
-                  { color: colors.primary },
-                  typography.caption,
-                ]}
+                style={[styles.crystalEmptyText, { color: moodTheme.text }]}
               >
-                This Week's Focus
+                Write {viewMode === "weekly" ? 7 : 30} entries to unlock magical
+                insights
               </Text>
-              <Text
-                style={[
-                  styles.aiFocusText,
-                  { color: colors.primary },
-                  typography.body,
-                ]}
-              >
-                {aiSummary.focus}
-              </Text>
+              <Text style={styles.crystalEmptyEmoji}>🌱</Text>
             </View>
-          </View>
-        ) : (
-          <View>
+          ) : aiSummary ? (
+            <View style={styles.crystalContent}>
+              <Text style={[styles.summaryText, { color: moodTheme.text }]}>
+                {aiSummary.summary}
+              </Text>
+              <LinearGradient
+                colors={[`${moodTheme.primary}40`, `${moodTheme.primary}20`]}
+                style={styles.focusCard}
+              >
+                <Text style={[styles.focusLabel, { color: moodTheme.text }]}>
+                  ✨ Focus Area
+                </Text>
+                <Text style={[styles.focusText, { color: moodTheme.text }]}>
+                  {aiSummary.focus}
+                </Text>
+              </LinearGradient>
+            </View>
+          ) : (
             <TouchableOpacity
-              style={[styles.aiButton, { backgroundColor: colors.primary }]}
-              onPress={generateWeeklySummary}
+              style={[
+                styles.crystalButton,
+                { backgroundColor: moodTheme.primary },
+              ]}
+              onPress={generateSummary}
               disabled={aiLoading}
-              accessibilityLabel="Generate weekly AI summary"
             >
               {aiLoading ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={[styles.aiButtonText, typography.body]}>
-                  Generate Weekly Summary
+                <Text style={styles.crystalButtonText}>
+                  🔮 Reveal {viewMode === "weekly" ? "Weekly" : "Monthly"}{" "}
+                  Wisdom
                 </Text>
               )}
             </TouchableOpacity>
-            {aiError && (
+          )}
+
+          {aiError && <Text style={styles.errorText}>{aiError}</Text>}
+        </LinearGradient>
+
+        {/* Guidance Section */}
+        <LinearGradient
+          colors={[
+            `${moodTheme.primary}25`,
+            `${moodTheme.primary}15`,
+            `${moodTheme.primary}05`,
+          ]}
+          style={styles.guidanceSection}
+        >
+          <Text style={styles.guidanceTitle}>🌟 Magical Guidance</Text>
+
+          <View style={styles.guidanceCards}>
+            <TouchableOpacity style={styles.guidanceCard}>
+              <Text style={styles.guidanceEmoji}>🧘‍♀️</Text>
               <Text
-                style={[
-                  styles.aiError,
-                  { color: colors.error, marginTop: spacing.sm },
-                  typography.caption,
-                ]}
+                style={[styles.guidanceCardTitle, { color: moodTheme.text }]}
               >
-                {aiError}
+                Mindfulness
               </Text>
-            )}
+              <Text
+                style={[styles.guidanceCardText, { color: moodTheme.text }]}
+              >
+                Daily reflection practices
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.guidanceCard}>
+              <Text style={styles.guidanceEmoji}>🌱</Text>
+              <Text
+                style={[styles.guidanceCardTitle, { color: moodTheme.text }]}
+              >
+                Growth
+              </Text>
+              <Text
+                style={[styles.guidanceCardText, { color: moodTheme.text }]}
+              >
+                Personal development tips
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.guidanceCard}>
+              <Text style={styles.guidanceEmoji}>💫</Text>
+              <Text
+                style={[styles.guidanceCardTitle, { color: moodTheme.text }]}
+              >
+                Inspiration
+              </Text>
+              <Text
+                style={[styles.guidanceCardText, { color: moodTheme.text }]}
+              >
+                Daily motivational quotes
+              </Text>
+            </TouchableOpacity>
           </View>
-        )}
-      </View>
+        </LinearGradient>
 
-      {entryCount === 0 && (
-        <View style={[styles.emptyState, { marginTop: spacing.xl }]}>
-          <Text
-            style={[
-              styles.emptyTitle,
-              { color: colors.text },
-              typography.subheading,
-            ]}
-          >
-            Start Your Journey
-          </Text>
-          <Text
-            style={[
-              styles.emptySubtitle,
-              { color: colors.textSecondary, marginTop: spacing.sm },
-              typography.body,
-            ]}
-          >
-            Create your first journal entry to see meaningful insights about
-            your mood patterns and journaling habits.
+        {/* Magical Footer */}
+        <View style={styles.magicalFooter}>
+          <Text style={[styles.footerText, { color: moodTheme.text }]}>
+            "Every entry is a step on your magical journey" ✨
           </Text>
         </View>
-      )}
-
-      {entryCount > 0 && (
-        <View style={[styles.encouragement, { marginTop: spacing.xl }]}>
-          <Text
-            style={[
-              styles.encouragementText,
-              { color: colors.textSecondary },
-              typography.body,
-            ]}
-          >
-            {streak.current > 0
-              ? `Great job! You're on a ${streak.current}-day streak. Keep it up!`
-              : "Start a new streak by journaling today!"}
-          </Text>
-        </View>
-      )}
-    </ScrollView>
+      </ScrollView>
+    </LinearGradient>
   );
+};
+
+const getMoodLabel = (mood: number): string => {
+  const labels = {
+    1: "stormy",
+    2: "cloudy",
+    3: "balanced",
+    4: "sunny",
+    5: "radiant",
+  };
+  return labels[mood as keyof typeof labels] || "balanced";
 };
 
 const styles = StyleSheet.create({
@@ -321,95 +398,253 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  content: {
-    flexGrow: 1,
-  },
-  header: {
+
+  // Loading
+  loadingContainer: {
     alignItems: "center",
+    padding: 40,
   },
-  title: {
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  subtitle: {
-    textAlign: "center",
-    lineHeight: 24,
+  loadingEmoji: {
+    fontSize: 60,
+    marginBottom: 20,
   },
   loadingText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 16,
     textAlign: "center",
   },
-  metricsGrid: {
+
+  // Magical Header
+  magicalHeader: {
+    paddingTop: 50,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    borderBottomLeftRadius: 25,
+    borderBottomRightRadius: 25,
+  },
+  magicalTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    marginBottom: 8,
+    textShadowColor: "rgba(0, 0, 0, 0.3)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  moodIndicator: {
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+    textShadowColor: "rgba(0, 0, 0, 0.2)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+
+  // Scroll Content
+  scrollContent: {
+    flex: 1,
+  },
+  scrollContainer: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+
+  // Period Toggle
+  periodToggle: {
+    flexDirection: "row",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 25,
+    padding: 4,
+    marginBottom: 20,
+    alignSelf: "center",
+  },
+  toggleButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  activeToggle: {
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+  },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "rgba(255, 255, 255, 0.8)",
+  },
+  activeToggleText: {
+    color: "#333",
+  },
+
+  // Stats Container
+  statsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 20,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  statEmoji: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    opacity: 0.9,
+  },
+
+  // Crystal Ball
+  crystalBall: {
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+    alignItems: "center",
+  },
+  crystalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  crystalEmpty: {
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  crystalEmptyText: {
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 12,
+    opacity: 0.9,
+  },
+  crystalEmptyEmoji: {
+    fontSize: 30,
+  },
+  crystalContent: {
     width: "100%",
   },
-  row: {
-    flexDirection: "row",
+  summaryText: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: "center",
+    marginBottom: 16,
+    fontWeight: "500",
   },
-  emptyState: {
-    alignItems: "center",
-    paddingHorizontal: 32,
+  focusCard: {
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
   },
-  emptyTitle: {
+  focusLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  focusText: {
+    fontSize: 16,
     fontWeight: "600",
     textAlign: "center",
+    lineHeight: 22,
   },
-  emptySubtitle: {
-    textAlign: "center",
-    lineHeight: 24,
-  },
-  encouragement: {
+  crystalButton: {
+    borderRadius: 15,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     alignItems: "center",
-    paddingHorizontal: 32,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  encouragementText: {
+  crystalButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  errorText: {
+    color: "#FF6B6B",
+    fontSize: 14,
     textAlign: "center",
-    lineHeight: 24,
+    marginTop: 12,
     fontStyle: "italic",
   },
-  aiCard: {
+
+  // Guidance Section
+  guidanceSection: {
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  guidanceTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  guidanceCards: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  guidanceCard: {
+    flex: 1,
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderRadius: 12,
     borderWidth: 1,
-    padding: 20,
+    borderColor: "rgba(255, 255, 255, 0.2)",
   },
-  aiCardTitle: {
-    fontWeight: "600",
+  guidanceEmoji: {
+    fontSize: 24,
     marginBottom: 8,
   },
-  aiCardSubtitle: {
-    lineHeight: 24,
-    fontStyle: "italic",
-  },
-  aiSummary: {
-    lineHeight: 24,
-    marginBottom: 8,
-  },
-  aiFocus: {
-    borderRadius: 8,
-    padding: 12,
-  },
-  aiFocusLabel: {
-    fontWeight: "600",
+  guidanceCardTitle: {
+    fontSize: 14,
+    fontWeight: "700",
     marginBottom: 4,
-    textTransform: "uppercase",
-    fontSize: 12,
-  },
-  aiFocusText: {
-    fontWeight: "500",
-    lineHeight: 20,
-  },
-  aiButton: {
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: "center",
-    minHeight: 44,
-  },
-  aiButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-  },
-  aiError: {
     textAlign: "center",
+  },
+  guidanceCardText: {
+    fontSize: 12,
+    textAlign: "center",
+    opacity: 0.9,
+    lineHeight: 16,
+  },
+
+  // Magical Footer
+  magicalFooter: {
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  footerText: {
+    fontSize: 14,
     fontStyle: "italic",
+    textAlign: "center",
+    opacity: 0.8,
   },
 });

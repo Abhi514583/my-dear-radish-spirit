@@ -180,3 +180,36 @@ export const getMoodLabel = (mood: number): string => {
   };
   return labels[mood as keyof typeof labels] || "Okay";
 };
+
+// Dynamic gradient backgrounds based on mood
+export const getMoodGradient = (mood: number): string[] => {
+  const gradients = {
+    1: ["#2D3748", "#4A5568", "#2D3748"], // Stormy - dark grays
+    2: ["#4A5568", "#718096", "#4A5568"], // Cloudy - medium grays
+    3: ["#3182CE", "#4299E1", "#63B3ED"], // Okay - blues
+    4: ["#ED8936", "#F6AD55", "#FBD38D"], // Sunny - oranges
+    5: ["#ECC94B", "#F6E05E", "#F7E98E"], // Radiant - yellows
+  };
+  return gradients[mood as keyof typeof gradients] || gradients[3];
+};
+
+// App-wide theme that changes based on current mood
+export const getAppTheme = (currentMood: number = 3) => {
+  const moodTheme = getMoodTheme(currentMood);
+  const gradient = getMoodGradient(currentMood);
+
+  return {
+    colors: {
+      primary: moodTheme.primary,
+      background: gradient[0],
+      surface: moodTheme.light,
+      text: moodTheme.text,
+      textSecondary: currentMood <= 2 ? "#CBD5E0" : "#4A5568",
+      border: currentMood <= 2 ? "#4A5568" : "#E2E8F0",
+      card: currentMood <= 2 ? "#3A3B4F" : "#FFFFFF",
+    },
+    gradient,
+    mood: currentMood,
+    isDark: currentMood <= 2,
+  };
+};

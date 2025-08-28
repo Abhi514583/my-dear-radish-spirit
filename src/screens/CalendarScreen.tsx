@@ -13,20 +13,36 @@ import { MagicalCalendar } from "../components/MagicalCalendar";
 import { EntryDetailScreen } from "./EntryDetailScreen";
 import { useEntries } from "../hooks/useEntries";
 import { Entry } from "../data/types";
+import { getMoodGradient, getMoodTheme } from "../theme/ghibliTheme";
 
 export const CalendarScreen: React.FC = () => {
-  const { entries, loading, loadEntries } = useEntries();
+  const { entries, loading, loadEntries, getAverageMood } = useEntries();
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [viewMode, setViewMode] = useState<"monthly" | "weekly">("monthly");
+  const [averageMood, setAverageMood] = useState(3);
+
+  // Get dynamic theme based on average mood
+  const moodGradient = getMoodGradient(Math.round(averageMood));
+  const moodTheme = getMoodTheme(Math.round(averageMood));
 
   // Refresh entries when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       loadEntries();
+      loadAverageMood();
     }, [loadEntries])
   );
+
+  const loadAverageMood = async () => {
+    try {
+      const avgMood = await getAverageMood();
+      setAverageMood(avgMood || 3);
+    } catch (error) {
+      console.error("Failed to load average mood:", error);
+    }
+  };
 
   const handleDatePress = (entry: Entry) => {
     setSelectedEntry(entry);
@@ -46,14 +62,17 @@ export const CalendarScreen: React.FC = () => {
       <TouchableOpacity
         style={[
           styles.toggleButton,
-          viewMode === "monthly" && styles.activeToggle,
+          viewMode === "monthly" && [
+            styles.activeToggle,
+            { backgroundColor: moodTheme.primary },
+          ],
         ]}
         onPress={() => setViewMode("monthly")}
       >
         <Text
           style={[
             styles.toggleText,
-            viewMode === "monthly" && styles.activeToggleText,
+            { color: viewMode === "monthly" ? "#FFFFFF" : moodTheme.text },
           ]}
         >
           🗓️ Month
@@ -62,14 +81,17 @@ export const CalendarScreen: React.FC = () => {
       <TouchableOpacity
         style={[
           styles.toggleButton,
-          viewMode === "weekly" && styles.activeToggle,
+          viewMode === "weekly" && [
+            styles.activeToggle,
+            { backgroundColor: moodTheme.primary },
+          ],
         ]}
         onPress={() => setViewMode("weekly")}
       >
         <Text
           style={[
             styles.toggleText,
-            viewMode === "weekly" && styles.activeToggleText,
+            { color: viewMode === "weekly" ? "#FFFFFF" : moodTheme.text },
           ]}
         >
           📅 Week
@@ -93,7 +115,7 @@ export const CalendarScreen: React.FC = () => {
   if (loading) {
     return (
       <LinearGradient
-        colors={["#E8F5E8", "#F1F8E9", "#E8F5E8"]}
+        colors={moodGradient}
         style={[styles.container, styles.centered]}
       >
         <Text style={styles.loadingText}>
@@ -101,7 +123,7 @@ export const CalendarScreen: React.FC = () => {
         </Text>
         <ActivityIndicator
           size="large"
-          color="#2E7D32"
+          color={moodTheme.primary}
           style={{ marginTop: 16 }}
         />
       </LinearGradient>
@@ -110,17 +132,29 @@ export const CalendarScreen: React.FC = () => {
 
   return (
     <LinearGradient
-      colors={["#E8F5E8", "#F1F8E9", "#E8F5E8"]}
+      colors={moodGradient}
       style={styles.container}
+      locations={[0, 0.5, 1]}
     >
-      {/* Compact Garden Header */}
-      <View style={styles.compactHeader}>
+      {/* Dynamic Garden Header */}
+      <LinearGradient
+        colors={[
+          `${moodTheme.primary}CC`,
+          `${moodTheme.primary}99`,
+          `${moodTheme.primary}66`,
+        ]}
+        style={styles.dynamicHeader}
+      >
         <View style={styles.headerRow}>
-          <Text style={styles.compactTitle}>🌻 Garden Stories</Text>
-          <Text style={styles.compactStats}>{entries.length} 🌱</Text>
+          <Text style={[styles.headerTitle, { color: moodTheme.text }]}>
+            🌻 Garden Stories
+          </Text>
+          <Text style={[styles.headerStats, { color: moodTheme.text }]}>
+            {entries.length} 🌱
+          </Text>
         </View>
         {renderViewToggle()}
-      </View>
+      </LinearGradient>
 
       {/* Garden Bed - Full Screen Calendar */}
       <View style={styles.fullScreenGarden}>
@@ -168,66 +202,74 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  // Compact Header
-  compactHeader: {
+  // Dynamic Header
+  dynamicHeader: {
     paddingTop: 50,
     paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-    borderBottomWidth: 1,
-    borderBottomColor: "#C8E6C9",
+    paddingBottom: 16,
+    borderBottomLeftRadius: 25,
+    borderBottomRightRadius: 25,
   },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  compactTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#2E7D32",
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    textShadowColor: "rgba(0, 0, 0, 0.2)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
-  compactStats: {
-    fontSize: 14,
-    color: "#4CAF50",
-    fontWeight: "600",
+  headerStats: {
+    fontSize: 16,
+    fontWeight: "700",
+    textShadowColor: "rgba(0, 0, 0, 0.2)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 
   // View Toggle
   viewToggle: {
     flexDirection: "row",
-    backgroundColor: "rgba(255, 255, 255, 0.6)",
-    borderRadius: 20,
-    padding: 2,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 25,
+    padding: 4,
     alignSelf: "center",
   },
   toggleButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 18,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
   activeToggle: {
-    backgroundColor: "#2E7D32",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   toggleText: {
-    fontSize: 12,
-    color: "#4CAF50",
-    fontWeight: "600",
-  },
-  activeToggleText: {
-    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
 
   // Full Screen Garden (Calendar)
   fullScreenGarden: {
     flex: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.4)",
-    marginHorizontal: 8,
-    marginVertical: 8,
-    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    marginHorizontal: 12,
+    marginVertical: 12,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#C8E6C9",
+    borderColor: "rgba(255, 255, 255, 0.4)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
   },
 
   // Empty Garden State
@@ -238,31 +280,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   emptyGardenTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#2E7D32",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  emptyGardenText: {
-    fontSize: 12,
-    color: "#4CAF50",
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
     textAlign: "center",
     marginBottom: 12,
+    textShadowColor: "rgba(0, 0, 0, 0.3)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  emptyGardenText: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.9)",
+    textAlign: "center",
+    marginBottom: 16,
+    fontWeight: "500",
   },
   emptyGardenDecor: {
     alignItems: "center",
   },
   gardenEmoji: {
-    fontSize: 20,
+    fontSize: 30,
   },
 
   // Loading
   loadingText: {
     textAlign: "center",
-    fontSize: 16,
+    fontSize: 18,
     fontStyle: "italic",
-    color: "#2E7D32",
+    color: "#FFFFFF",
     marginBottom: 8,
+    fontWeight: "600",
+    textShadowColor: "rgba(0, 0, 0, 0.3)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 });
